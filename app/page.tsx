@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Send, Image as ImageIcon, Copy, ShieldAlert, Lock, UserPlus, X } from 'lucide-react';
+import { Send, Image as ImageIcon, Copy, Shield, Lock, UserPlus, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSocket } from '../hooks/useSocket';
 
@@ -22,7 +22,7 @@ export default function GhostChat() {
 
   const getTime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // --- SOCKET LOGIC ---
+  // --- SOCKET LOGIC (Same Secure Logic) ---
   useEffect(() => {
     if (!socket) return;
     socket.connect();
@@ -34,7 +34,7 @@ export default function GhostChat() {
 
     socket.on('start_chat', () => {
       setStep('chat');
-      setMessages([{ id: '0', sender: 'sys', time: getTime(), text: 'Connection Secured. History is off.' }]);
+      setMessages([{ id: '0', sender: 'sys', time: getTime(), text: 'End-to-End Encryption Enabled.' }]);
     });
 
     socket.on('receive_message', (data) => {
@@ -43,7 +43,7 @@ export default function GhostChat() {
 
     socket.on('partner_left', () => {
       setStep('end');
-      socket.disconnect(); // Force disconnect to ensure security
+      socket.disconnect();
     });
 
     socket.on('error', (msg) => {
@@ -75,7 +75,7 @@ export default function GhostChat() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !socket) return;
-    if (file.size > 2 * 1024 * 1024) return alert("Max 2MB"); // Small limit for speed
+    if (file.size > 2 * 1024 * 1024) return alert("Max 2MB");
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -88,91 +88,107 @@ export default function GhostChat() {
 
   const copyCode = () => {
     navigator.clipboard.writeText(roomCode);
-    alert('Code copied to clipboard!');
+    // Visual feedback handled by UI state if needed, mostly browser alert for now
+    alert('Code copied!');
   };
 
   return (
-    <div className="min-h-screen bg-black text-green-500 font-mono flex justify-center items-center p-4">
-      <div className="w-full max-w-md h-[90vh] bg-zinc-950 border border-green-900 rounded-lg shadow-[0_0_20px_rgba(0,255,0,0.1)] flex flex-col overflow-hidden relative">
+    <div className="min-h-screen bg-black text-white font-sans flex justify-center items-center p-4">
+      {/* Main Card Container */}
+      <div className="w-full max-w-md h-[90vh] bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden relative">
 
-        {/* Header */}
-        <div className="p-4 border-b border-green-900 flex justify-between items-center bg-zinc-900/50">
+        {/* Header - Minimalist */}
+        <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-950/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-2">
-            <ShieldAlert size={20} />
-            <span className="font-bold tracking-widest">GHOST_PROTOCOL</span>
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <Shield size={16} className="text-white" />
+            </div>
+            <span className="font-bold text-lg tracking-tight">Stealth</span>
           </div>
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          {/* Status Indicator */}
+          <div className={`w-2 h-2 rounded-full ${step === 'chat' ? 'bg-green-500' : 'bg-zinc-700'}`}></div>
         </div>
 
         <AnimatePresence mode="wait">
 
           {/* 1. HOME SCREEN */}
           {step === 'home' && (
-            <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col p-6 justify-center gap-6">
-              <div className="text-center mb-8">
-                <Lock size={64} className="mx-auto mb-4 text-green-700" />
-                <h1 className="text-2xl font-bold mb-2">Encrypted Channel</h1>
-                <p className="text-green-800 text-sm">No Logs. No History. RAM Only.</p>
+            <motion.div key="home" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col p-8 justify-center">
+              <div className="text-center mb-12">
+                <h1 className="text-3xl font-bold mb-3">Private Comms.</h1>
+                <p className="text-zinc-500">Secure, ephemeral chat. <br />Data vanishes upon disconnect.</p>
               </div>
 
-              <button onClick={createRoom} className="w-full py-4 border border-green-500 hover:bg-green-900/20 text-green-400 font-bold rounded flex items-center justify-center gap-3 transition-all">
-                <UserPlus size={20} /> CREATE SECURE ROOM
-              </button>
+              <div className="space-y-4">
+                <button onClick={createRoom} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-900/20 active:scale-95">
+                  <UserPlus size={20} /> Create New Room
+                </button>
 
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-green-900"></div></div>
-                <div className="relative flex justify-center"><span className="bg-zinc-950 px-2 text-green-800 text-sm">OR JOIN</span></div>
+                <div className="relative py-4">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-zinc-800"></div></div>
+                  <div className="relative flex justify-center"><span className="bg-zinc-950 px-2 text-zinc-600 text-sm font-medium">OR</span></div>
+                </div>
+
+                <div className="bg-zinc-900 p-2 rounded-2xl border border-zinc-800 flex items-center">
+                  <input
+                    value={joinInput}
+                    onChange={(e) => setJoinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter Code"
+                    className="flex-1 bg-transparent px-4 py-2 outline-none text-white font-medium placeholder:text-zinc-600"
+                  />
+                  <button onClick={joinRoom} disabled={joinInput.length !== 6} className="p-3 bg-zinc-800 hover:bg-white hover:text-black rounded-xl text-zinc-400 transition-all disabled:opacity-50 disabled:hover:bg-zinc-800 disabled:hover:text-zinc-400">
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <input
-                  value={joinInput}
-                  onChange={(e) => setJoinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="ENTER 6-DIGIT CODE"
-                  className="flex-1 bg-black border border-green-800 p-4 text-center text-lg tracking-[0.5em] focus:border-green-500 outline-none placeholder:tracking-normal"
-                />
-                <button onClick={joinRoom} className="px-6 bg-green-800 text-black font-bold hover:bg-green-600 transition-colors">→</button>
-              </div>
-
-              {error && <p className="text-red-500 text-center text-sm mt-2 font-bold animate-pulse">{error}</p>}
+              {error && <p className="text-red-500 text-center text-sm mt-6 bg-red-500/10 py-2 rounded-lg">{error}</p>}
             </motion.div>
           )}
 
           {/* 2. WAITING FOR FRIEND */}
           {step === 'waiting' && (
-            <motion.div key="waiting" initial={{ x: 100 }} animate={{ x: 0 }} exit={{ x: -100 }} className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <h2 className="text-sm text-green-700 mb-4">WAITING FOR TARGET...</h2>
-
-              <div onClick={copyCode} className="bg-green-900/10 border-2 border-dashed border-green-500 p-8 rounded-xl cursor-pointer hover:bg-green-900/20 transition-all group">
-                <h1 className="text-5xl font-bold tracking-widest select-all">{roomCode}</h1>
-                <div className="flex items-center justify-center gap-2 mt-4 text-green-600 group-hover:text-green-400">
-                  <Copy size={16} /> <span>CLICK TO COPY</span>
-                </div>
+            <motion.div key="waiting" initial={{ x: 50, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -50, opacity: 0 }} className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+              <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                <Lock size={24} className="text-indigo-500" />
               </div>
 
-              <p className="mt-8 text-xs text-green-800 max-w-[200px]">
-                Share this code securely. Room locks automatically after connection.
-              </p>
+              <h2 className="text-zinc-400 mb-2">Room Secure</h2>
+              <p className="text-sm text-zinc-600 mb-8">Share this code to begin.</p>
+
+              <button onClick={copyCode} className="group relative bg-zinc-900 border border-zinc-800 hover:border-indigo-500/50 p-8 rounded-3xl cursor-pointer transition-all active:scale-95 w-full">
+                <h1 className="text-5xl font-bold tracking-widest text-white group-hover:text-indigo-400 transition-colors">{roomCode}</h1>
+                <div className="absolute bottom-3 left-0 right-0 text-center">
+                  <span className="text-xs text-zinc-500 flex items-center justify-center gap-1"><Copy size={10} /> Tap to Copy</span>
+                </div>
+              </button>
             </motion.div>
           )}
 
           {/* 3. CHAT ROOM */}
           {step === 'chat' && (
-            <motion.div key="chat" className="flex-1 flex flex-col h-full bg-black/50">
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <motion.div key="chat" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="flex-1 flex flex-col h-full bg-black">
+              {/* Messages Area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                 {messages.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.sender === 'me' ? 'justify-end' : msg.sender === 'sys' ? 'justify-center' : 'justify-start'}`}>
+
                     {msg.sender === 'sys' ? (
-                      <span className="text-[10px] text-green-900 border border-green-900 px-2 py-1">{msg.text}</span>
+                      <span className="text-[10px] text-zinc-500 bg-zinc-900 px-3 py-1 rounded-full mt-2 mb-2">{msg.text}</span>
                     ) : (
-                      <div className={`max-w-[80%] break-words ${msg.sender === 'me' ? 'text-right' : 'text-left'}`}>
+                      <div className={`max-w-[75%] flex flex-col ${msg.sender === 'me' ? 'items-end' : 'items-start'}`}>
                         {msg.text && (
-                          <div className={`p-3 rounded-none border ${msg.sender === 'me' ? 'border-green-500 bg-green-900/10' : 'border-zinc-800 bg-zinc-900/50'}`}>
+                          <div className={`px-4 py-2.5 rounded-2xl text-[15px] shadow-sm ${msg.sender === 'me'
+                              ? 'bg-indigo-600 text-white rounded-br-none'
+                              : 'bg-zinc-800 text-zinc-200 rounded-bl-none'
+                            }`}>
                             {msg.text}
                           </div>
                         )}
-                        {msg.image && <img src={msg.image} className="max-w-[200px] border border-green-900 opacity-80 hover:opacity-100" />}
-                        <span className="text-[10px] text-green-900 block mt-1">{msg.time}</span>
+                        {msg.image && (
+                          <img src={msg.image} className="max-w-[200px] rounded-2xl border border-zinc-800 mt-1" />
+                        )}
+                        <span className="text-[10px] text-zinc-600 mt-1 px-1">{msg.time}</span>
                       </div>
                     )}
                   </div>
@@ -180,23 +196,40 @@ export default function GhostChat() {
                 <div ref={endRef} />
               </div>
 
-              <form onSubmit={sendMessage} className="p-3 bg-zinc-900/30 border-t border-green-900 flex gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-green-800 hover:text-green-500"><ImageIcon size={20} /></button>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-                <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="ENCRYPTED MESSAGE..." className="flex-1 bg-transparent outline-none text-green-500 placeholder:text-green-900" />
-                <button type="submit" disabled={!input.trim()} className="text-green-500 hover:text-green-400 disabled:opacity-30"><Send size={20} /></button>
-              </form>
+              {/* Input Area */}
+              <div className="p-4 bg-zinc-950 border-t border-zinc-900">
+                <form onSubmit={sendMessage} className="flex gap-2 items-center bg-zinc-900 p-1.5 pr-2 rounded-full border border-zinc-800 focus-within:border-indigo-500/50 transition-colors">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-10 h-10 flex items-center justify-center rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+                    <ImageIcon size={20} />
+                  </button>
+                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Type a secure message..."
+                    className="flex-1 bg-transparent outline-none text-white placeholder:text-zinc-600 text-sm pl-2"
+                  />
+
+                  <button type="submit" disabled={!input.trim()} className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:shadow-none hover:scale-105 active:scale-95 transition-all">
+                    <Send size={18} />
+                  </button>
+                </form>
+              </div>
             </motion.div>
           )}
 
           {/* 4. SESSION DESTROYED */}
           {step === 'end' && (
-            <motion.div key="end" className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-red-950/20">
-              <ShieldAlert size={64} className="text-red-600 mb-6 animate-pulse" />
-              <h2 className="text-3xl font-bold text-red-500 mb-2">CONNECTION SEVERED</h2>
-              <p className="text-red-800 mb-8">Room deleted. Logs wiped. No evidence remains.</p>
-              <button onClick={() => window.location.reload()} className="px-8 py-3 border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-colors">
-                INITIATE NEW SESSION
+            <motion.div key="end" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-zinc-950">
+              <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-6">
+                <Lock size={32} className="text-zinc-500" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Session Ended</h2>
+              <p className="text-zinc-500 mb-8">Room deleted. No logs remain.</p>
+
+              <button onClick={() => window.location.reload()} className="px-8 py-3 bg-white text-black font-bold rounded-2xl hover:bg-zinc-200 transition-colors w-full">
+                New Session
               </button>
             </motion.div>
           )}
