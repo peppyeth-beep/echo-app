@@ -8,121 +8,90 @@ app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*", // Allow connections from anywhere (Frontend)
-    methods: ["GET", "POST"]
-  },
-  // Increase payload size to allow image uploads (Default is 1MB)
-  maxHttpBufferSize: 1e7 // 10MB
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  maxHttpBufferSize: 1e7 // 10MB for images
 });
 
-// --- MATCHING LOGIC ---
+// --- STATE MANAGEMENT (RAM ONLY) ---
+// We store rooms here. If server restarts, ALL data is lost (Good for privacy).
+// Format: { '123456': { users: [socketId1, socketId2], locked: false } }
+let activeRooms = {};
 
-// Separate queues for each emotion
-// Structure: { 'vent': { 'Anxiety': [] }, 'listen': { 'Anxiety': [] } }
-let queues = {
-  vent: {},
-  listen: {}
+// Helper: Generate 6-digit random code
+const generateRoomCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
 };
-
-const addToQueue = (socketId, role, emotion) => {
-  // Ensure the array exists for this specific emotion
-  if (!queues[role][emotion]) {
-    queues[role][emotion] = [];
-  }
-  // Add user to the end of the line
-  queues[role][emotion].push(socketId);
-  console.log(`User ${socketId} joined ${role} queue for ${emotion}`);
-};
-
-const findMatch = (socketId, role, emotion) => {
-  // If I am a Ranter, I need a Listener (and vice versa)
-  const targetRole = role === 'vent' ? 'listen' : 'vent';
-
-  // Look for someone waiting in the target queue with the SAME emotion
-  const targetQueue = queues[targetRole][emotion];
-
-  if (targetQueue && targetQueue.length > 0) {
-    // Found a match! Pop them from the queue
-    const partnerId = targetQueue.shift();
-
-    const roomId = `room_${socketId}_${partnerId}`;
-
-    // Connect both users to the private room
-    const mySock = io.sockets.sockets.get(socketId);
-    const partnerSock = io.sockets.sockets.get(partnerId);
-
-    if (mySock && partnerSock) {
-      mySock.join(roomId);
-      partnerSock.join(roomId);
-
-      // Notify both users
-      io.to(roomId).emit('match_found', { roomId });
-      console.log(`Match created: ${roomId}`);
-      return true;
-    }
-  }
-  return false;
-};
-
-// --- SOCKET EVENTS ---
 
 io.on('connection', (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
-  // 1. Join Queue
-  socket.on('join_queue', ({ role, emotion }) => {
-    // Try to find a match INSTANTLY
-    const matched = findMatch(socket.id, role, emotion);
+  // 1. CREATE A PRIVATE ROOM
+  socket.on('create_room', () => {
+    const roomCode = generateRoomCode();
 
-    if (!matched) {
-      // If no immediate match, add to queue and wait
-      addToQueue(socket.id, role, emotion);
-    }
+    // Create the room in RAM
+    activeRooms[roomCode] = { users: [socket.id], locked: false };
+
+    socket.join(roomCode);
+    socket.emit('room_created', roomCode);
+    console.log(`Room ${roomCode} created by ${socket.id}`);
   });
 
-  // 2. Chat Message (Text OR Image)
+  // 2. JOIN A PRIVATE ROOM
+  socket.on('join_room', (roomCode) => {
+    const room = activeRooms[roomCode];
+
+    // Security Checks
+    if (!room) {
+      socket.emit('error', 'Invalid Code. Room does not exist.');
+      return;
+    }
+    if (room.locked || room.users.length >= 2) {
+      socket.emit('error', 'Room is full or locked.');
+      return;
+    }
+
+    // Join logic
+    room.users.push(socket.id);
+    socket.join(roomCode);
+
+    // Lock the room so no one else can enter (Spy Mode)
+    room.locked = true;
+
+    // Notify both users
+    io.to(roomCode).emit('start_chat');
+    console.log(`User ${socket.id} joined room ${roomCode}`);
+  });
+
+  // 3. SECURE MESSAGING
   socket.on('send_message', (data) => {
-    // data = { text: "..." } OR { image: "base64..." }
-
-    // Find the room this user is in (excluding their own ID)
+    // Only send to the specific room the user is in
     const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-
     if (rooms.length > 0) {
-      // Forward the exact data object to the other person in the room
-      socket.to(rooms[0]).emit('receive_message', data);
+      const roomCode = rooms[0];
+      socket.to(roomCode).emit('receive_message', data);
     }
   });
 
-  // 3. Typing Indicators
-  socket.on('typing_start', () => {
+  // 4. DISCONNECT & NUKE DATA
+  socket.on('disconnecting', () => {
     const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-    if (rooms.length > 0) socket.to(rooms[0]).emit('partner_typing', true);
-  });
 
-  socket.on('typing_stop', () => {
-    const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-    if (rooms.length > 0) socket.to(rooms[0]).emit('partner_typing', false);
-  });
+    for (const roomCode of rooms) {
+      if (activeRooms[roomCode]) {
+        // Notify the other person
+        socket.to(roomCode).emit('partner_left');
 
-  // 4. Disconnect
-  socket.on('disconnect', () => {
-    console.log(`User Disconnected: ${socket.id}`);
-
-    // Notify partner if they were in a chat
-    const rooms = Array.from(socket.rooms).filter(r => r !== socket.id);
-    if (rooms.length > 0) {
-      socket.to(rooms[0]).emit('partner_disconnected');
+        // DESTROY THE ROOM IMMEDIATELY
+        // This ensures data is deleted from RAM instantly
+        delete activeRooms[roomCode];
+        console.log(`Room ${roomCode} destroyed.`);
+      }
     }
-
-    // Note: In a full production app, you should also remove the user
-    // from the `queues` object if they disconnect while waiting.
-    // For this MVP, it's fine (matchmaking will just fail silently if matched with a ghost).
   });
 });
 
-// Use Cloud Port OR Local 4000
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
-  console.log(`SERVER RUNNING ON PORT ${PORT}`);
+  console.log(`SECURE SERVER RUNNING ON PORT ${PORT}`);
 });
